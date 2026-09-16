@@ -1,0 +1,7 @@
+# Lightweight dependencies for Hindi-to-Arabic Video Subtitle Generator
+streamlit>=1.38.0
+moviepy>=1.0.3,<2.0.0
+openai>=1.40.0
+google-genai>=1.0.0
+python-dotenv>=1.0.0
+requests>=2.31.0

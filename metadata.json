@@ -1,0 +1,6 @@
+{
+  "name": "Hindi to Arabic Video Translator",
+  "description": "Translate Hindi video files into Arabic with accurate speech-to-text timestamps and export timed SRT subtitles, featuring complete Python Streamlit codebase and live web processing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
