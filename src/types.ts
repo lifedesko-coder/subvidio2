@@ -6,6 +6,7 @@ export interface SubtitleSegment {
   endTime: string;
   hindiText: string;
   arabicText: string;
+  isSong?: boolean;
 }
 
 export interface SampleVideo {

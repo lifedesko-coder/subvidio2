@@ -69,7 +69,7 @@ with st.sidebar:
     # API Provider Selection (Gemini is 100% Free & Default)
     provider = st.selectbox(
         "ASR & Translation Engine",
-        options=["Google Gemini (مجاني وفوري - موصى به)", "OpenAI (Whisper + GPT-4o-mini)"],
+        options=["Google Gemini 3.8 Flash (دقة توقيت فائقة للأفلام وحرق الترجمة)", "OpenAI (Whisper + GPT-4o-mini)"],
         index=0
     )
     

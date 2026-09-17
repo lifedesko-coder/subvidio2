@@ -187,18 +187,26 @@ app.post("/api/translate-video", async (req, res) => {
     }
 
     // System prompt for high-precision ASR & Arabic Translation
-    const systemPrompt = `You are a professional Hindi-to-Arabic subtitler and audio translator.
+    const systemPrompt = `You are an elite audiovisual localization and subtitling expert specializing in Indian cinema and television series (Bollywood movies, Hindi daily soaps/dramas, and web series).
 Your goal is to transcribe spoken Hindi audio/video with precise timestamps (in seconds), and translate each sentence into natural, context-aware ${dialect}.
 
-Subtitling Rules:
-1. Break subtitles into logical, readable speech segments (typically 2 to 6 seconds each).
-2. For each segment, provide:
-   - "start": start time in seconds (float, e.g. 1.25)
-   - "end": end time in seconds (float, e.g. 4.80)
-   - "hindiText": accurate transcription of the Hindi spoken words in Devanagari script.
-   - "arabicText": natural, fluent, and idiomatic translation in ${dialect}. Keep it screen-readable and concise.
-3. Ensure timestamps are sequential and non-overlapping.
-4. Return ONLY a valid JSON object with a "segments" array.`;
+Critical Indian Drama Subtitling Rules:
+1. RAPID SPEECH & HINGLISH:
+   - Characters frequently speak at high speed and mix Hindi with English ("Hinglish", e.g., "Tum samajh nahi rahe ho, this is totally crazy!").
+   - Catch every dialogue nuance accurately and translate into natural, idiomatic ${dialect}. Do not drop fast phrases or fast dialogue exchanges.
+2. SONGS & BACKGROUND MUSIC (BGM):
+   - When songs or background vocal tracks play (romantic, emotional, or festive Bollywood musical pieces), capture the song lyrics and translate them with poetic eloquence.
+   - Enclose song translations with musical note symbols: "♪ كلمات الأغنية بالعربية ♪" (e.g., "♪ نبض قلبي ينادي باسمك ♪") and set "isSong": true.
+3. OVERLAPPING DIALOGUES:
+   - When multiple speakers talk at once, use standard subtitle dashes:
+     - الشخص الأول
+     - الشخص الثاني
+4. TIMINGS & SYNCHRONIZATION (ZERO-DRIFT FOR HARDCODING/BURNING):
+   - Timestamps must NEVER appear before the character starts talking or linger long after speech ends.
+   - Start timestamp ("start") must be the EXACT second the first syllable is uttered.
+   - End timestamp ("end") must be when the speech terminates.
+   - Keep segments between 1.2 to 4.5 seconds maximum. Long running sentences cause subtitle lag during burning/hardcoding.
+   - Strictly sequential: seg[i].start >= seg[i-1].end. Never overlap timestamps.`;
 
     let promptContents: any;
 
@@ -232,8 +240,8 @@ Subtitling Rules:
       return res.status(400).json({ error: "Please provide media file or text transcript." });
     }
 
-    // Helper to generate content with fallback across available models and retry on temporary 503 high-demand spikes
-    const candidateModels = ["gemini-3.1-flash-lite", "gemini-3.8-flash", "gemini-flash-latest"];
+    // Helper to generate content with gemini-3.8-flash as priority for highest timing precision
+    const candidateModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
     let responseText = "";
     let usedModel = "";
     let lastError: any = null;
@@ -259,6 +267,7 @@ Subtitling Rules:
                         id: { type: Type.INTEGER },
                         start: { type: Type.NUMBER },
                         end: { type: Type.NUMBER },
+                        isSong: { type: Type.BOOLEAN },
                         hindiText: { type: Type.STRING },
                         arabicText: { type: Type.STRING },
                       },

@@ -82,28 +82,38 @@ def transcribe_and_translate_with_gemini(
     mime_type = "audio/mp3"
 
     prompt = f"""
-You are an expert audiovisual translator.
-Listen carefully to this audio in Hindi (or mixed Hindi/English) and generate synchronized subtitle segments translated into natural {arabic_dialect}.
+You are an elite audiovisual localization expert specializing in Indian cinema and television series (Bollywood, Hindi drama series, and OTT shows).
+Listen with extreme precision to this audio track and generate highly synchronized subtitle segments translated into natural, professional {arabic_dialect}.
 
-Return ONLY a valid JSON array of objects with the exact following schema:
+The audio contains challenges typical of Indian dramas:
+1. RAPID HINDI & HINGLISH CODE-SWITCHING: Indian characters frequently switch between Hindi and English rapidly (e.g. "Kya problem hai yaar", "Tum seriously bol rahe ho?"). Catch EVERY word, translate the intended meaning smoothly into Arabic, and do not skip fast phrases.
+2. SONGS & BACKGROUND MUSIC (BGM): When a song or lyrics play (including background singing or romantic/dramatic musical tracks), transcribe the song lyrics and translate them with poetic eloquence into Arabic, enclosing the Arabic text with musical notes: `♪ كلمات الأغنية ♪` (e.g. `♪ قلبي ينبض بحبك ♪`).
+3. OVERLAPPING / CROSS-TALK: If two characters talk over each other, format the Arabic subtitle using dashes:
+   - الشخص الأول يتكلم
+   - الشخص الثاني يرد
+4. SUBTITLE SYNCHRONIZATION & ZERO-DRIFT (CRITICAL FOR HARDCODING/BURNING):
+   - Timestamps must accurately match exact spoken audio to prevent early or lagging subtitles when burned into video.
+   - Start timestamp ("start") must be the exact second speech begins.
+   - End timestamp ("end") must be the second speech finishes.
+   - Duration per segment: keep between 1.2 to 4.5 seconds.
+   - Ensure start and end timestamps are strictly ascending and never overlap.
+
+Return ONLY a valid JSON array of objects with the exact schema:
 [
   {{
     "id": 1,
     "start": 0.0,
-    "end": 2.5,
-    "hindi_text": "Hindi transcript here",
-    "arabic_text": "الترجمة العربية الدقيقة هنا"
+    "end": 2.8,
+    "is_song": false,
+    "hindi_text": "Original Hindi/Hinglish phrase",
+    "arabic_text": "الترجمة العربية الاحترافية"
   }}
 ]
 
-Important Guidelines:
-1. Divide the speech into natural, readable subtitle chunks (1-2 lines, under 7 seconds each).
-2. The start and end timestamps must accurately reflect the audio timings in seconds as floats (e.g. 1.25).
-3. The translation into Arabic must be grammatically correct, culturally natural, and concise for viewers.
-4. Output strictly the JSON array, no extra commentary or markdown backticks.
+Output strictly the JSON array, no conversational text or markdown explanation.
 """
 
-    models_to_try = ["gemini-2.5-flash", "gemini-3.1-flash-lite"]
+    models_to_try = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"]
     last_err = None
 
     for m in models_to_try:
@@ -115,7 +125,8 @@ Important Guidelines:
                     prompt
                 ],
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    temperature=0.2, # Low temperature ensures high fidelity and accurate timestamps without hallucinations
                 )
             )
             if response and response.text:
@@ -136,12 +147,18 @@ Important Guidelines:
                 for idx, seg in enumerate(parsed):
                     start = float(seg.get("start", idx * 3.0))
                     end = float(seg.get("end", start + 3.0))
+                    ar_text = str(seg.get("arabic_text", seg.get("arabic", ""))).strip()
+                    is_song = bool(seg.get("is_song", False))
+                    if is_song and not ar_text.startswith("♪"):
+                        ar_text = f"♪ {ar_text} ♪"
+                        
                     valid_segments.append({
                         "id": idx + 1,
                         "start": start,
                         "end": end,
+                        "is_song": is_song,
                         "hindi_text": seg.get("hindi_text", seg.get("hindi", "")),
-                        "arabic_text": seg.get("arabic_text", seg.get("arabic", ""))
+                        "arabic_text": ar_text
                     })
                 if valid_segments:
                     return valid_segments
