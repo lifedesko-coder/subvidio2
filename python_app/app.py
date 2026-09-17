@@ -7,6 +7,7 @@ import streamlit as st
 from dotenv import load_dotenv
 from translator_core import (
     extract_audio,
+    transcribe_and_translate_with_gemini,
     transcribe_hindi_whisper,
     translate_segments_to_arabic,
     generate_srt,
@@ -65,21 +66,21 @@ st.markdown('<div class="subtitle">Extract audio, transcribe Hindi speech with a
 with st.sidebar:
     st.header("⚙️ Configuration")
     
-    # API Provider Selection
+    # API Provider Selection (Gemini is 100% Free & Default)
     provider = st.selectbox(
         "ASR & Translation Engine",
-        options=["OpenAI (Whisper + GPT-4o-mini)", "Gemini (Gemini 2.5 Flash)"],
+        options=["Google Gemini (مجاني وفوري - موصى به)", "OpenAI (Whisper + GPT-4o-mini)"],
         index=0
     )
     
     # API Key Handling (Reads from .env or manual input)
     default_key = ""
-    if "OpenAI" in provider:
-        default_key = os.getenv("OPENAI_API_KEY", "")
-        api_key = st.text_input("OpenAI API Key", value=default_key, type="password", help="Enter your OpenAI API key for Whisper and GPT-4o-mini.")
-    else:
+    if "Gemini" in provider:
         default_key = os.getenv("GEMINI_API_KEY", "")
         api_key = st.text_input("Gemini API Key", value=default_key, type="password", help="Enter your Google Gemini API key.")
+    else:
+        default_key = os.getenv("OPENAI_API_KEY", "")
+        api_key = st.text_input("OpenAI API Key", value=default_key, type="password", help="Enter your OpenAI API key for Whisper and GPT-4o-mini.")
 
     st.markdown("---")
     
@@ -138,13 +139,29 @@ with col_right:
                 status_placeholder.info("🎙️ Step 2/4: Transcribing Hindi speech and generating timestamps (ASR)...")
                 progress_bar.progress(50)
                 
-                if "OpenAI" in provider:
-                    segments = transcribe_hindi_whisper(audio_path, api_key=api_key)
+                if "Gemini" in provider:
+                    # Direct Gemini speech-to-translated-Arabic segments
+                    status_placeholder.info(f"🎙️ جاري تحليل الصوت بالذكاء الاصطناعي وترجمته إلى {dialect} وتوليد التوقيتات...")
+                    progress_bar.progress(60)
+                    translated_segments = transcribe_and_translate_with_gemini(
+                        audio_path,
+                        api_key=api_key,
+                        arabic_dialect=dialect
+                    )
                 else:
-                    # Gemini multimodal transcription & translation fallback
-                    from translator_core import transcribe_hindi_whisper
-                    # If using OpenAI Whisper for timestamps:
+                    # OpenAI Whisper + Translation
                     segments = transcribe_hindi_whisper(audio_path, api_key=api_key)
+                    if not segments:
+                        st.error("No speech segments could be detected in the video audio.")
+                        st.stop()
+                    status_placeholder.info(f"🌐 جاري ترجمة النصوص إلى {dialect}...")
+                    progress_bar.progress(80)
+                    translated_segments = translate_segments_to_arabic(
+                        segments,
+                        api_key=api_key,
+                        provider="openai",
+                        arabic_dialect=dialect
+                    )
                 
                 # Cleanup extracted audio
                 if os.path.exists(audio_path):
@@ -153,24 +170,12 @@ with col_right:
                     except Exception:
                         pass
                 
-                if not segments:
-                    st.error("No speech segments could be detected in the video audio.")
+                if not translated_segments:
+                    st.error("لم يتم العثور على مقاطع صوتية أو فشل استخراج التوقيتات من الفيديو.")
                     st.stop()
-                    
-                # Step 3: AI Translation
-                status_placeholder.info(f"🌐 Step 3/4: Translating Hindi text into natural {dialect}...")
-                progress_bar.progress(75)
-                
-                trans_provider = "openai" if "OpenAI" in provider else "gemini"
-                translated_segments = translate_segments_to_arabic(
-                    segments,
-                    api_key=api_key,
-                    provider=trans_provider,
-                    arabic_dialect=dialect
-                )
                 
                 # Step 4: SRT Subtitle Generation
-                status_placeholder.info("📝 Step 4/4: Formatting SRT subtitle timestamps...")
+                status_placeholder.info("📝 جاري صياغة ملفات الترجمة (.SRT)...")
                 progress_bar.progress(95)
                 
                 arabic_srt = generate_srt(translated_segments, language_key="arabic_text")

@@ -61,6 +61,98 @@ def extract_audio(video_file_bytes: bytes, original_filename: str = "input_video
             except Exception:
                 pass
 
+def transcribe_and_translate_with_gemini(
+    audio_path: str,
+    api_key: str,
+    arabic_dialect: str = "Modern Standard Arabic (الفصحى)"
+) -> List[Dict[str, Any]]:
+    """
+    Transcribes audio and generates synchronized Arabic subtitles directly with Google Gemini.
+    No OpenAI API key required.
+    """
+    import base64
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=api_key)
+
+    with open(audio_path, "rb") as f:
+        audio_bytes = f.read()
+
+    mime_type = "audio/mp3"
+
+    prompt = f"""
+You are an expert audiovisual translator.
+Listen carefully to this audio in Hindi (or mixed Hindi/English) and generate synchronized subtitle segments translated into natural {arabic_dialect}.
+
+Return ONLY a valid JSON array of objects with the exact following schema:
+[
+  {{
+    "id": 1,
+    "start": 0.0,
+    "end": 2.5,
+    "hindi_text": "Hindi transcript here",
+    "arabic_text": "الترجمة العربية الدقيقة هنا"
+  }}
+]
+
+Important Guidelines:
+1. Divide the speech into natural, readable subtitle chunks (1-2 lines, under 7 seconds each).
+2. The start and end timestamps must accurately reflect the audio timings in seconds as floats (e.g. 1.25).
+3. The translation into Arabic must be grammatically correct, culturally natural, and concise for viewers.
+4. Output strictly the JSON array, no extra commentary or markdown backticks.
+"""
+
+    models_to_try = ["gemini-2.5-flash", "gemini-3.1-flash-lite"]
+    last_err = None
+
+    for m in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=m,
+                contents=[
+                    types.Part.from_bytes(data=audio_bytes, mime_type=mime_type),
+                    prompt
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            if response and response.text:
+                clean_text = response.text.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                if clean_text.startswith("```"):
+                    clean_text = clean_text[3:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
+                clean_text = clean_text.strip()
+                
+                parsed = json.loads(clean_text)
+                if isinstance(parsed, dict):
+                    parsed = next((v for v in parsed.values() if isinstance(v, list)), [])
+                
+                valid_segments = []
+                for idx, seg in enumerate(parsed):
+                    start = float(seg.get("start", idx * 3.0))
+                    end = float(seg.get("end", start + 3.0))
+                    valid_segments.append({
+                        "id": idx + 1,
+                        "start": start,
+                        "end": end,
+                        "hindi_text": seg.get("hindi_text", seg.get("hindi", "")),
+                        "arabic_text": seg.get("arabic_text", seg.get("arabic", ""))
+                    })
+                if valid_segments:
+                    return valid_segments
+        except Exception as err:
+            last_err = err
+            continue
+
+    if last_err:
+        raise RuntimeError(f"Gemini processing error: {str(last_err)}")
+    return []
+
 def transcribe_hindi_whisper(audio_path: str, api_key: str) -> List[Dict[str, Any]]:
     """
     Transcribes Hindi audio using OpenAI Whisper API with segment timestamps.
